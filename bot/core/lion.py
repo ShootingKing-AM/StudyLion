@@ -1,9 +1,13 @@
 import pytz
+import discord
+from functools import reduce
 from datetime import datetime, timedelta
 
 from meta import client
 from data import tables as tb
 from settings import UserSettings, GuildSettings
+
+from LionContext import LionContext
 
 
 class Lion:
@@ -19,6 +23,9 @@ class Lion:
 
     # Lion cache. Currently lions don't expire
     _lions = {}  # (guildid, userid) -> Lion
+
+    # Extra methods supplying an economy bonus
+    _economy_bonuses = []
 
     def __init__(self, guildid, userid):
         self.guildid = guildid
@@ -44,6 +51,8 @@ class Lion:
             # TODO: Debug log
             lion = tb.lions.fetch(key)
             if not lion:
+                tb.user_config.fetch_or_create(userid)
+                tb.guild_config.fetch_or_create(guildid)
                 tb.lions.create_row(
                     guildid=guildid,
                     userid=userid,
@@ -56,7 +65,11 @@ class Lion:
         return (self.guildid, self.userid)
 
     @property
-    def member(self):
+    def guild(self) -> discord.Guild:
+        return client.get_guild(self.guildid)
+
+    @property
+    def member(self) -> discord.Member:
         """
         The discord `Member` corresponding to this user.
         May be `None` if the member is no longer in the guild or the caches aren't populated.
@@ -71,9 +84,23 @@ class Lion:
     @property
     def data(self):
         """
-        The Row corresponding to this user.
+        The Row corresponding to this member.
         """
         return tb.lions.fetch(self.key)
+
+    @property
+    def user_data(self):
+        """
+        The Row corresponding to this user.
+        """
+        return tb.user_config.fetch_or_create(self.userid)
+
+    @property
+    def guild_data(self):
+        """
+        The Row corresponding to this guild.
+        """
+        return tb.guild_config.fetch_or_create(self.guildid)
 
     @property
     def settings(self):
@@ -88,6 +115,15 @@ class Lion:
         The GuildSettings interface for this member.
         """
         return GuildSettings(self.guildid)
+
+    @property
+    def ctx(self) -> LionContext:
+        """
+        Manufacture a `LionContext` with the lion member as an author.
+        Useful for accessing member context utilities.
+        Be aware that `author` may be `None` if the member was not cached.
+        """
+        return LionContext(client, guild=self.guild, author=self.member)
 
     @property
     def time(self):
@@ -119,6 +155,24 @@ class Lion:
             coins += session.coins_earned
 
         return int(coins)
+
+    @property
+    def economy_bonus(self):
+        """
+        Economy multiplier
+        """
+        return reduce(
+            lambda x, y: x * y,
+            [func(self) for func in self._economy_bonuses]
+        )
+
+    @classmethod
+    def register_economy_bonus(cls, func):
+        cls._economy_bonuses.append(func)
+
+    @classmethod
+    def unregister_economy_bonus(cls, func):
+        cls._economy_bonuses.remove(func)
 
     @property
     def session(self):
@@ -207,6 +261,46 @@ class Lion:
 
         return remaining
 
+    @property
+    def profile_tags(self):
+        """
+        Returns a list of profile tags, or the default tags.
+        """
+        tags = tb.profile_tags.queries.get_tags_for(self.guildid, self.userid)
+        prefix = self.ctx.best_prefix
+        return tags or [
+            f"Use {prefix}setprofile",
+            "and add your tags",
+            "to this section",
+            f"See {prefix}help setprofile for more"
+        ]
+
+    @property
+    def name(self):
+        """
+        Returns the best local name possible.
+        """
+        if self.member:
+            name = self.member.display_name
+        elif self.data.display_name:
+            name = self.data.display_name
+        else:
+            name = str(self.userid)
+
+        return name
+
+    def update_saved_data(self, member: discord.Member):
+        """
+        Update the stored discord data from the givem member.
+        Intended to be used when we get member data from events that may not be available in cache.
+        """
+        if self.guild_data.name != member.guild.name:
+            self.guild_data.name = member.guild.name
+        if self.user_data.avatar_hash != member.avatar:
+            self.user_data.avatar_hash = member.avatar
+        if self.data.display_name != member.display_name:
+            self.data.display_name = member.display_name
+
     def localize(self, naive_utc_dt):
         """
         Localise the provided naive UTC datetime into the user's timezone.
@@ -214,11 +308,11 @@ class Lion:
         timezone = self.settings.timezone.value
         return naive_utc_dt.replace(tzinfo=pytz.UTC).astimezone(timezone)
 
-    def addCoins(self, amount, flush=True):
+    def addCoins(self, amount, flush=True, bonus=False):
         """
         Add coins to the user, optionally store the transaction in pending.
         """
-        self._pending_coins += amount
+        self._pending_coins += amount * (self.economy_bonus if bonus else 1)
         self._pending[self.key] = self
         if flush:
             self.flush()

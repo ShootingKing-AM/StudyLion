@@ -16,7 +16,7 @@ class task_limit(settings.Integer, GuildSetting):
     display_name = "task_limit"
     desc = "Maximum number of tasks each user may have."
 
-    _default = 30
+    _default = 99
 
     long_desc = (
         "Maximum number of tasks each user may have in the todo system."
@@ -38,7 +38,7 @@ class task_reward(settings.Integer, GuildSetting):
     display_name = "task_reward"
     desc = "Number of LionCoins given for each completed TODO task."
 
-    _default = 250
+    _default = 50
 
     long_desc = (
         "LionCoin reward given for completing each task on the TODO list."

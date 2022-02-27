@@ -14,7 +14,7 @@ meta = RowTable(
 
 user_config = RowTable(
     'user_config',
-    ('userid', 'timezone'),
+    ('userid', 'timezone', 'topgg_vote_reminder', 'avatar_hash'),
     'userid',
     cache=TTLCache(5000, ttl=60*5)
 )
@@ -33,7 +33,8 @@ guild_config = RowTable(
      'video_studyban', 'video_grace_period',
      'greeting_channel', 'greeting_message', 'returning_message',
      'starting_funds', 'persist_roles',
-     'pomodoro_channel'),
+     'pomodoro_channel',
+     'name'),
     'guildid',
     cache=TTLCache(2500, ttl=60*5)
 )
@@ -51,6 +52,7 @@ lions = RowTable(
      'revision_mute_count',
      'last_study_badgeid',
      'video_warned',
+     'display_name',
      '_timestamp'
      ),
     ('guildid', 'userid'),
@@ -72,7 +74,7 @@ def add_pending(pending):
             """
             UPDATE members
             SET
-                coins = coins + t.coin_diff
+                coins = LEAST(coins + t.coin_diff, 2147483647)
             FROM
                 (VALUES %s)
             AS

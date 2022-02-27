@@ -1,6 +1,6 @@
 import asyncio
 import discord
-from cmdClient import Context
+from LionContext import LionContext as Context
 from cmdClient.lib import SafeCancellation
 
 from data import tables
@@ -46,7 +46,7 @@ async def error_reply(ctx, error_str, send_args={}, **kwargs):
         ctx.sent_messages.append(message)
         return message
     except discord.Forbidden:
-        if not ctx.guild or ctx.ch.permissions_for(ctx.guild.me).send_mssages:
+        if not ctx.guild or ctx.ch.permissions_for(ctx.guild.me).send_messages:
             await ctx.reply("Command failed, I don't have permission to send embeds in this channel!")
         raise SafeCancellation
 

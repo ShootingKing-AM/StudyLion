@@ -8,11 +8,12 @@ from typing import Any, Optional
 
 import pytz
 import discord
-from cmdClient.Context import Context
 from cmdClient.lib import SafeCancellation
 
 from meta import client
 from utils.lib import parse_dur, strfdur, prop_tabulate, multiple_replace
+
+from LionContext import LionContext as Context
 
 from .base import UserInputError
 
@@ -130,8 +131,8 @@ class Integer(SettingType):
     accepts = "An integer."
 
     # Set limits on the possible integers
-    _min = -4096
-    _max = 4096
+    _min = -2147483647
+    _max = 2147483647
 
     @classmethod
     def _data_from_value(cls, id: int, value: Optional[bool], **kwargs):
@@ -679,7 +680,7 @@ class Duration(SettingType):
             )
         if cls._min is not None and num < cls._min:
             raise UserInputError(
-                "Duration connot be shorter than `{}`!".format(
+                "Duration cannot be shorter than `{}`!".format(
                     strfdur(cls._min, short=False, show_days=cls._show_days)
                 )
             )
